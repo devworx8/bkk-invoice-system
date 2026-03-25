@@ -103,9 +103,18 @@ def inject_css() -> None:
                 visibility: hidden !important;
             }
 
-            /* Hide Streamlit footer */
-            footer {
+            /* Hide Streamlit footer and bottom-right widgets */
+            footer,
+            [data-testid="manage-app-button"],
+            .streamlit-chat,
+            ._container_gzau3_1,
+            ._profileContainer_gzau3_53,
+            div[data-testid="chatIconContainer"],
+            #hubspot-messages-iframe-container,
+            .intercom-lightweight-app {
                 display: none !important;
+                visibility: hidden !important;
+            }
             }
 
             /* Form inputs - force light mode */
