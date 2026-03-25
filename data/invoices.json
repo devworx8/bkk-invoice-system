@@ -1,0 +1,37 @@
+[
+  {
+    "invoice_number": "BKK-INV-2026-002",
+    "issue_date": "2026-03-25",
+    "due_date": "2026-04-01",
+    "bill_to_name": "Khanyisa Disability Centre",
+    "bill_to_address": "Pretoria, South Africa",
+    "bill_to_email": "accounts@khanyisadisability.org.za",
+    "bill_to_phone": "",
+    "reference": "KD-BKK-PILOT-001",
+    "notes": "Community support pricing has been applied for Khanyisa Disability Centre. This invoice reflects a heavily discounted rate in support of disability inclusion work.",
+    "status": "Sent",
+    "items": [
+      {
+        "description": "Website design and page layout",
+        "qty": "1.00",
+        "rate": "650.00"
+      },
+      {
+        "description": "Domain name purchase and setup",
+        "qty": "1.00",
+        "rate": "350.00"
+      },
+      {
+        "description": "Backend integration and configuration",
+        "qty": "1.00",
+        "rate": "1500.00"
+      },
+      {
+        "description": "Disability centre community support discount",
+        "qty": "1.00",
+        "rate": "-1000.00"
+      }
+    ],
+    "vat_rate": 0.0
+  }
+]

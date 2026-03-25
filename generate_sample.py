@@ -1,3 +1,4 @@
+
 from pathlib import Path
 
 from invoice_system import build_invoice_pdf, load_settings, make_example_invoice, save_invoice

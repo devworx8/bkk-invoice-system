@@ -1,6 +1,18 @@
+# Virtual environment
 .venv/
 __pycache__/
 *.pyc
-data/
-*.pdf
+
+# Secrets – never commit
 .env
+.streamlit/secrets.toml
+
+# Generated PDFs
+rendered/*.pdf
+render_check/*.pdf
+sample_invoice_khanyisa.pdf
+
+# OS files
+.DS_Store
+Thumbs.db
+bkk_invoice_system/
