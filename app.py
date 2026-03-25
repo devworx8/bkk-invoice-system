@@ -29,9 +29,11 @@ from invoice_system import (
     money,
 )
 
+# Use the BKK logo as the browser tab icon
+_favicon = Path(__file__).resolve().parent / "static" / "favicon.ico"
 st.set_page_config(
     page_title="BKK Invoice System",
-    page_icon="🧾",
+    page_icon=str(_favicon) if _favicon.exists() else "🧾",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -86,6 +88,24 @@ def inject_css() -> None:
 
             .stApp [data-testid="stHeader"] {
                 background: transparent !important;
+            }
+
+            /* Hide GitHub ribbon, deploy button, Streamlit branding */
+            .stDeployButton,
+            [data-testid="stToolbar"],
+            .viewerBadge_container__r5tak,
+            #stDecoration,
+            header[data-testid="stHeader"] .stActionButton,
+            iframe[title="GitHub"],
+            .github-corner,
+            a[href*="github.com/streamlit"] {
+                display: none !important;
+                visibility: hidden !important;
+            }
+
+            /* Hide Streamlit footer */
+            footer {
+                display: none !important;
             }
 
             /* Form inputs - force light mode */
@@ -161,11 +181,29 @@ def inject_css() -> None:
             .hero {
                 background: linear-gradient(135deg, #173C65 0%, #155e75 65%, #E77728 100%);
                 color: white;
-                padding: 1.4rem 1.5rem;
+                padding: 1.4rem 1.8rem;
                 border-radius: 24px;
                 box-shadow: 0 20px 45px rgba(23, 60, 101, 0.18);
                 margin-bottom: 1rem;
                 border: 1px solid rgba(255,255,255,0.18);
+                display: flex;
+                align-items: center;
+                gap: 1.5rem;
+            }
+
+            .hero-logo {
+                flex-shrink: 0;
+                width: 80px;
+                height: 80px;
+                border-radius: 18px;
+                object-fit: contain;
+                background: rgba(255,255,255,0.92);
+                padding: 6px;
+                box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+            }
+
+            .hero-text {
+                flex: 1;
             }
 
             .hero .eyebrow {
@@ -370,7 +408,8 @@ def inject_css() -> None:
 
             /* ── Mobile responsive ── */
             @media (max-width: 768px) {
-                .hero { padding: 1rem; border-radius: 16px; }
+                .hero { padding: 1rem; border-radius: 16px; flex-direction: column; text-align: center; gap: 0.8rem; }
+                .hero-logo { width: 56px; height: 56px; border-radius: 14px; }
                 .hero .title { font-size: 1.3rem; }
                 .metric-card { padding: 0.7rem; border-radius: 14px; }
                 .metric-value { font-size: 1.2rem; }
@@ -513,21 +552,25 @@ with st.sidebar:
 # -----------------------------
 # Top hero
 # -----------------------------
-col_logo, col_hero = st.columns([1, 4])
-with col_logo:
-    if logo_path.exists():
-        st.image(str(logo_path), width=130)
-with col_hero:
-    st.markdown(
-        f"""
-        <div class="hero">
+import base64 as _b64
+
+_logo_b64 = ""
+if logo_path.exists():
+    _logo_b64 = _b64.b64encode(logo_path.read_bytes()).decode()
+
+st.markdown(
+    f"""
+    <div class="hero">
+        {f'<img class="hero-logo" src="data:image/jpeg;base64,{_logo_b64}" alt="BKK">' if _logo_b64 else ''}
+        <div class="hero-text">
             <div class="eyebrow">Digital invoicing + PDF export + share</div>
             <div class="title">{settings.business_name}</div>
             <div class="sub">A clean, premium invoicing workspace for creating, sending, and tracking professional invoices.</div>
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 # -----------------------------
