@@ -5,6 +5,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
 
+import base64 as _b64
 import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
@@ -117,7 +118,6 @@ def inject_css() -> None:
             .intercom-lightweight-app {
                 display: none !important;
                 visibility: hidden !important;
-            }
             }
 
             /* Form inputs - force light mode */
@@ -510,6 +510,13 @@ settings = load_settings()
 clients = load_clients()
 invoices = load_invoices()
 
+# Auto-mark overdue invoices (Sent/Draft past due date)
+_today_str = str(date.today())
+for _inv in invoices:
+    if _inv.status in {"Sent", "Draft"} and _inv.due_date < _today_str:
+        _inv.status = "Overdue"
+        save_invoice(_inv)
+
 # Resolve logo path: try settings value, fall back to default assets location
 _logo_candidate = Path(settings.logo_path)
 if not _logo_candidate.exists():
@@ -564,7 +571,6 @@ with st.sidebar:
 # -----------------------------
 # Top hero
 # -----------------------------
-import base64 as _b64
 
 _logo_b64 = ""
 if logo_path.exists():
@@ -793,10 +799,22 @@ elif page == "Create Invoice":
         st.markdown('</div>', unsafe_allow_html=True)
 
     if submitted:
-        with st.spinner("Saving invoice…"):
-            save_invoice(live_invoice)
-        st.success(f"Invoice {live_invoice.invoice_number} saved successfully.")
-        st.rerun()
+        # Validate before saving
+        errors = []
+        if not bill_to_name.strip():
+            errors.append("Client name is required.")
+        if not items:
+            errors.append("At least one line item is required.")
+        if not invoice_number.strip():
+            errors.append("Invoice number is required.")
+        if errors:
+            for err in errors:
+                st.error(err)
+        else:
+            with st.spinner("Saving invoice…"):
+                save_invoice(live_invoice)
+            st.success(f"Invoice {live_invoice.invoice_number} saved successfully.")
+            st.rerun()
 
 
 # -----------------------------
@@ -848,7 +866,7 @@ elif page == "Invoice History":
                 )
 
                 # Action buttons row
-                act1, act2, act3, act4 = st.columns(4)
+                act1, act2, act3, act4, act5 = st.columns(5)
                 with act1:
                     if inv.status != "Paid":
                         if st.button("✅ Mark Paid", key=f"paid_{inv.invoice_number}", use_container_width=True):
@@ -868,6 +886,25 @@ elif page == "Invoice History":
                 with act4:
                     if st.button("📧 Send", key=f"send_toggle_{inv.invoice_number}", use_container_width=True):
                         st.session_state[f"show_send_{inv.invoice_number}"] = not st.session_state.get(f"show_send_{inv.invoice_number}", False)
+                with act5:
+                    if st.button("📋 Duplicate", key=f"dup_{inv.invoice_number}", use_container_width=True):
+                        dup = Invoice(
+                            invoice_number=next_invoice_number(settings),
+                            issue_date=str(date.today()),
+                            due_date=str(date.today() + timedelta(days=settings.payment_terms_days)),
+                            bill_to_name=inv.bill_to_name,
+                            bill_to_address=inv.bill_to_address,
+                            bill_to_email=inv.bill_to_email,
+                            bill_to_phone=inv.bill_to_phone,
+                            reference=inv.reference,
+                            notes=inv.notes,
+                            status="Draft",
+                            items=[InvoiceItem(i.description, i.qty, i.rate) for i in inv.items],
+                            vat_rate=inv.vat_rate,
+                        )
+                        st.session_state["edit_invoice"] = dup
+                        st.session_state["nav_page"] = "Create Invoice"
+                        st.rerun()
 
                 # Send email panel
                 if st.session_state.get(f"show_send_{inv.invoice_number}"):
@@ -920,6 +957,33 @@ elif page == "Invoice History":
                             st.rerun()
 
                 st.markdown('</div>', unsafe_allow_html=True)
+
+    # CSV Export
+    if invoices:
+        st.markdown("---")
+        csv_rows = []
+        for inv in invoices:
+            subtotal = sum(it.quantity * it.unit_price for it in inv.items)
+            vat_amt = subtotal * inv.vat_rate
+            csv_rows.append({
+                "Invoice #": inv.invoice_number,
+                "Date": inv.issue_date,
+                "Due": inv.due_date,
+                "Client": inv.bill_to_name,
+                "Reference": inv.reference,
+                "Status": inv.status,
+                "Subtotal": round(subtotal, 2),
+                "VAT": round(vat_amt, 2),
+                "Total": round(subtotal + vat_amt, 2),
+            })
+        csv_df = pd.DataFrame(csv_rows)
+        st.download_button(
+            "📥 Export Invoices to CSV",
+            csv_df.to_csv(index=False),
+            file_name="bkk_invoices_export.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
 
     st.markdown('</div>', unsafe_allow_html=True)
 
