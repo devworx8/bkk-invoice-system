@@ -34,7 +34,7 @@ from invoice_system import (
 )
 
 # Use the BKK logo as the browser tab icon
-_favicon = Path(__file__).resolve().parent / "static" / "favicon.ico"
+_favicon = Path(__file__).resolve().parent / "static" / "icon-192.png"
 st.set_page_config(
     page_title="BKK Invoice System",
     page_icon=str(_favicon) if _favicon.exists() else "🧾",
