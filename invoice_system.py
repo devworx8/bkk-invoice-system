@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 import os
 import smtplib
 from dataclasses import asdict, dataclass, field
@@ -27,6 +28,39 @@ SETTINGS_PATH = DATA_DIR / "settings.json"
 CLIENTS_PATH = DATA_DIR / "clients.json"
 INVOICES_PATH = DATA_DIR / "invoices.json"
 LOGO_PATH = ASSETS_DIR / "bkk_logo.jpeg"
+
+log = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Supabase connection (optional — falls back to local JSON if not configured)
+# ---------------------------------------------------------------------------
+_supabase_client = None
+
+
+def _get_supabase():
+    """Return a cached Supabase client, or None if not configured."""
+    global _supabase_client
+    if _supabase_client is not None:
+        return _supabase_client
+
+    url = os.environ.get("SUPABASE_URL", "")
+    key = os.environ.get("SUPABASE_KEY", "")
+    if not url or not key:
+        # Also check Streamlit secrets
+        try:
+            import streamlit as st
+            url = url or st.secrets.get("SUPABASE_URL", "")
+            key = key or st.secrets.get("SUPABASE_KEY", "")
+        except Exception:
+            pass
+    if url and key:
+        try:
+            from supabase import create_client
+            _supabase_client = create_client(url, key)
+            log.info("Supabase connected: %s", url)
+        except Exception as exc:
+            log.warning("Supabase init failed, using local JSON: %s", exc)
+    return _supabase_client
 
 
 def money(value: Decimal | float | int | str) -> Decimal:
@@ -156,43 +190,125 @@ def ensure_data_files() -> None:
         INVOICES_PATH.write_text("[]")
 
 
+# ---------------------------------------------------------------------------
+# Settings
+# ---------------------------------------------------------------------------
 def load_settings() -> BusinessSettings:
+    sb = _get_supabase()
+    if sb:
+        try:
+            resp = sb.table("bkk_settings").select("data").eq("id", "default").execute()
+            if resp.data and resp.data[0].get("data"):
+                raw = resp.data[0]["data"]
+                if isinstance(raw, str):
+                    raw = json.loads(raw)
+                if raw:
+                    return BusinessSettings(**raw)
+        except Exception as exc:
+            log.warning("Supabase load_settings failed: %s", exc)
+    # Fallback to local JSON
     ensure_data_files()
     return BusinessSettings(**json.loads(SETTINGS_PATH.read_text()))
 
 
 def save_settings(settings: BusinessSettings) -> None:
+    data = asdict(settings)
+    sb = _get_supabase()
+    if sb:
+        try:
+            sb.table("bkk_settings").upsert({"id": "default", "data": data}).execute()
+        except Exception as exc:
+            log.warning("Supabase save_settings failed: %s", exc)
+    # Always persist locally too
     ensure_data_files()
-    SETTINGS_PATH.write_text(json.dumps(asdict(settings), indent=2))
+    SETTINGS_PATH.write_text(json.dumps(data, indent=2))
 
 
+# ---------------------------------------------------------------------------
+# Clients
+# ---------------------------------------------------------------------------
 def load_clients() -> List[Client]:
+    sb = _get_supabase()
+    if sb:
+        try:
+            resp = sb.table("bkk_clients").select("*").order("name").execute()
+            if resp.data is not None:
+                return [Client(**row) for row in resp.data]
+        except Exception as exc:
+            log.warning("Supabase load_clients failed: %s", exc)
     ensure_data_files()
     return [Client(**c) for c in json.loads(CLIENTS_PATH.read_text())]
 
 
 def save_clients(clients: List[Client]) -> None:
+    sb = _get_supabase()
+    if sb:
+        try:
+            # Replace all clients: delete then insert
+            sb.table("bkk_clients").delete().neq("name", "").execute()
+            if clients:
+                sb.table("bkk_clients").upsert(
+                    [asdict(c) for c in clients]
+                ).execute()
+        except Exception as exc:
+            log.warning("Supabase save_clients failed: %s", exc)
     ensure_data_files()
     CLIENTS_PATH.write_text(json.dumps([asdict(c) for c in clients], indent=2))
 
 
+# ---------------------------------------------------------------------------
+# Invoices
+# ---------------------------------------------------------------------------
 def load_invoices() -> List[Invoice]:
+    sb = _get_supabase()
+    if sb:
+        try:
+            resp = sb.table("bkk_invoices").select("*").order("created_at", desc=True).execute()
+            if resp.data is not None:
+                rows = []
+                for row in resp.data:
+                    row.pop("created_at", None)
+                    if isinstance(row.get("items"), str):
+                        row["items"] = json.loads(row["items"])
+                    row["vat_rate"] = float(row.get("vat_rate", 15.0))
+                    rows.append(Invoice.from_dict(row))
+                return rows
+        except Exception as exc:
+            log.warning("Supabase load_invoices failed: %s", exc)
     ensure_data_files()
     return [Invoice.from_dict(i) for i in json.loads(INVOICES_PATH.read_text())]
 
 
 def save_invoice(invoice: Invoice) -> None:
+    sb = _get_supabase()
+    if sb:
+        try:
+            row = invoice.to_dict()
+            row["items"] = json.dumps(row["items"])  # Store as JSON string
+            sb.table("bkk_invoices").upsert(row).execute()
+        except Exception as exc:
+            log.warning("Supabase save_invoice failed: %s", exc)
+    # Also persist locally
     invoices = load_invoices()
     invoices = [i for i in invoices if i.invoice_number != invoice.invoice_number]
     invoices.insert(0, invoice)
+    ensure_data_files()
     INVOICES_PATH.write_text(json.dumps([i.to_dict() for i in invoices], indent=2))
 
 
 def delete_invoice(invoice_number: str) -> bool:
+    sb = _get_supabase()
+    if sb:
+        try:
+            sb.table("bkk_invoices").delete().eq("invoice_number", invoice_number).execute()
+        except Exception as exc:
+            log.warning("Supabase delete_invoice failed: %s", exc)
+    # Also delete locally
     invoices = load_invoices()
     filtered = [i for i in invoices if i.invoice_number != invoice_number]
     if len(filtered) == len(invoices):
         return False
+    ensure_data_files()
     INVOICES_PATH.write_text(json.dumps([i.to_dict() for i in filtered], indent=2))
     return True
 

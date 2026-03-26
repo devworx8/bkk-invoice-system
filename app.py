@@ -7,6 +7,9 @@ from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+from dotenv import load_dotenv
+
+load_dotenv()  # Load .env for local dev (SUPABASE_URL, SUPABASE_KEY, etc.)
 
 from invoice_system import (
     BusinessSettings,
